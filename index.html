@@ -914,11 +914,15 @@
             },
 
             checkLoginState(preloadedNews = null) {
-                const loggedInAgency = sessionStorage.getItem('loggedInAgency');
-                if (loggedInAgency) {
+                const loggedInAgency = localStorage.getItem('loggedInAgency');
+                const expiry = localStorage.getItem('loginExpiry');
+                const isExpired = !expiry || Date.now() > parseInt(expiry);
+
+                if (loggedInAgency && !isExpired) {
                     this.currentUser = loggedInAgency;
-                    const isRO = sessionStorage.getItem('isReadOnly') === 'true';
+                    const isRO = localStorage.getItem('isReadOnly') === 'true';
                     this.isReadOnly = isRO;
+                    localStorage.setItem('loginExpiry', (Date.now() + 30 * 24 * 60 * 60 * 1000).toString());
                     this.showMainPage();
                 } else {
                     this.showLoginPage();
@@ -931,8 +935,10 @@
                 this.mainPage.classList.add('hidden'); this.editFormPage.classList.add('hidden');
                 this.appHeader.classList.add('hidden'); this.loginPage.classList.remove('hidden');
                 this.currentUser = null; 
-                sessionStorage.removeItem('loggedInAgency');
-                sessionStorage.removeItem('isReadOnly');
+                localStorage.removeItem('loggedInAgency');
+                localStorage.removeItem('isReadOnly');
+                localStorage.removeItem('loginExpiry');
+                if (this.bgUpdateInterval) clearInterval(this.bgUpdateInterval);
             },
 
             showMainPage() {
@@ -972,6 +978,13 @@
                     this.mainViewTitle.textContent = 'รายการหน่วยเลือกตั้งในความรับผิดชอบ';
                 }
                 
+                if (this.bgUpdateInterval) clearInterval(this.bgUpdateInterval);
+                this.bgUpdateInterval = setInterval(() => {
+                    if (!this.mainPage.classList.contains('hidden')) {
+                        this.loadDashboardData(true);
+                    }
+                }, 30000);
+
                 this.loadDashboardData();
             },
 
@@ -1115,10 +1128,12 @@
                 if (tabList && tabList.parentElement) tabList.parentElement.classList.remove('mb-4', 'border-b', 'border-gray-200');
             },
 
-            loadDashboardData() {
-                const loaderHtml = `<tr><td colspan="7" class="text-center py-10"><i class="fa-solid fa-spinner fa-spin text-3xl text-theme-600"></i><p class="mt-3 text-gray-500 font-medium">กำลังโหลดข้อมูล...</p></td></tr>`;
-                this.stationsTableBody.innerHTML = loaderHtml;
-                this.stationsGridContainer.innerHTML = `<div class="col-span-full text-center py-10"><i class="fa-solid fa-spinner fa-spin text-3xl text-theme-600"></i><p class="mt-3 text-gray-500 font-medium">กำลังโหลดข้อมูล...</p></div>`;
+            loadDashboardData(silent = false) {
+                if (!silent) {
+                    const loaderHtml = `<tr><td colspan="7" class="text-center py-10"><i class="fa-solid fa-spinner fa-spin text-3xl text-theme-600"></i><p class="mt-3 text-gray-500 font-medium">กำลังโหลดข้อมูล...</p></td></tr>`;
+                    this.stationsTableBody.innerHTML = loaderHtml;
+                    this.stationsGridContainer.innerHTML = `<div class="col-span-full text-center py-10"><i class="fa-solid fa-spinner fa-spin text-3xl text-theme-600"></i><p class="mt-3 text-gray-500 font-medium">กำลังโหลดข้อมูล...</p></div>`;
+                }
 
                 apiCall('getDashboardData', { agency: this.currentUser }).then(res => {
                     if(res.status === 'success') {
@@ -1130,13 +1145,17 @@
                         }
                         this.updateViewUI();
                     } else {
-                        this.stationsTableBody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-500"><i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i><br>โหลดข้อมูลไม่สำเร็จ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></td></tr>`;
-                        this.stationsGridContainer.innerHTML = `<div class="col-span-full text-center py-10 text-red-500"><i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i><br>โหลดข้อมูลไม่สำเร็จ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></div>`;
+                        if (!silent) {
+                            this.stationsTableBody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-500"><i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i><br>โหลดข้อมูลไม่สำเร็จ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></td></tr>`;
+                            this.stationsGridContainer.innerHTML = `<div class="col-span-full text-center py-10 text-red-500"><i class="fa-solid fa-circle-exclamation text-2xl mb-2"></i><br>โหลดข้อมูลไม่สำเร็จ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></div>`;
+                        }
                         console.error(res.message);
                     }
                 }).catch(e => {
-                    this.stationsTableBody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-500">เกิดข้อผิดพลาดในการเชื่อมต่อ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></td></tr>`;
-                     this.stationsGridContainer.innerHTML = `<div class="col-span-full text-center py-10 text-red-500">เกิดข้อผิดพลาดในการเชื่อมต่อ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></div>`;
+                    if (!silent) {
+                        this.stationsTableBody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-red-500">เกิดข้อผิดพลาดในการเชื่อมต่อ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></td></tr>`;
+                         this.stationsGridContainer.innerHTML = `<div class="col-span-full text-center py-10 text-red-500">เกิดข้อผิดพลาดในการเชื่อมต่อ <button onclick="app.loadDashboardData()" class="text-blue-600 underline ml-1">ลองใหม่</button></div>`;
+                    }
                 });
             },
 
@@ -1427,22 +1446,12 @@
                 const dateStr = now.toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
                 const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
 
-                // บันทึกครบแล้ว — แสดงแค่ชื่อหน่วยงานและจำนวนหน่วย
+                // บันทึกครบแล้ว
                 let completedLines = '';
                 if (completed.length === 0) {
-                    completedLines = '  (ยังไม่มีหน่วยงานที่บันทึกครบ)';
+                    completedLines = '(ยังไม่มีโรงเรียนใดที่บันทึกครบ)';
                 } else {
-                    completedLines = completed.map(a =>
-                        `  ✅ ${a.agencyName} (${a.completedStations}/${a.totalStations} หน่วย)`
-                    ).join('\n');
-                }
-
-                // รอดำเนินการ — แสดงรายละเอียดหน่วยที่บันทึกครบแล้วด้วย (ถ้ามี)
-                let pendingLines = '';
-                if (pending.length === 0) {
-                    pendingLines = '  (ทุกหน่วยงานบันทึกครบแล้ว 🎉)';
-                } else {
-                    pendingLines = pending.map(a => {
+                    completedLines = completed.map((a, idx) => {
                         const doneStations = stations
                             .filter(s => String(s.Agency).trim() === String(a.agencyName).trim() && s.progress >= 100)
                             .sort((x, y) => {
@@ -1450,24 +1459,55 @@
                                 return subCmp !== 0 ? subCmp : Number(x.StationNumber) - Number(y.StationNumber);
                             });
 
-                        let detail = `  ⏳ ${a.agencyName} (${a.completedStations}/${a.totalStations} หน่วย)`;
+                        let detail = `\n${idx + 1}.${a.agencyName} (${a.completedStations}/${a.totalStations} หน่วย)`;
 
                         if (doneStations.length > 0) {
-                            // จัดกลุ่มตามแขวง
                             const bySubDistrict = {};
                             doneStations.forEach(s => {
                                 const sub = s.SubDistrict || 'ไม่ระบุแขวง';
                                 if (!bySubDistrict[sub]) bySubDistrict[sub] = [];
                                 bySubDistrict[sub].push(s.StationNumber);
                             });
-
-                            detail += `\n      ✔ บันทึกครบแล้ว:`;
+                            detail += `\n✔ บันทึกครบแล้ว:`;
                             Object.entries(bySubDistrict).forEach(([sub, nums]) => {
                                 const subLabel = sub.startsWith('แขวง') ? sub : `แขวง${sub}`;
-                                detail += `\n        ${subLabel} — หน่วยที่ ${nums.join(', ')}`;
+                                detail += `\n${subLabel} — หน่วยที่ ${nums.join(', ')}`;
+                            });
+                        }
+                        return detail;
+                    }).join('\n');
+                }
+
+                // ระหว่างดำเนินการ
+                let pendingLines = '';
+                if (pending.length === 0) {
+                    pendingLines = '(ทุกโรงเรียนบันทึกครบแล้ว 🎉)';
+                } else {
+                    const startIdx = completed.length;
+                    pendingLines = pending.map((a, idx) => {
+                        const doneStations = stations
+                            .filter(s => String(s.Agency).trim() === String(a.agencyName).trim() && s.progress >= 100)
+                            .sort((x, y) => {
+                                const subCmp = String(x.SubDistrict).localeCompare(String(y.SubDistrict), 'th');
+                                return subCmp !== 0 ? subCmp : Number(x.StationNumber) - Number(y.StationNumber);
+                            });
+
+                        let detail = `\n${startIdx + idx + 1}.${a.agencyName} (${a.completedStations}/${a.totalStations} หน่วย)`;
+
+                        if (doneStations.length > 0) {
+                            const bySubDistrict = {};
+                            doneStations.forEach(s => {
+                                const sub = s.SubDistrict || 'ไม่ระบุแขวง';
+                                if (!bySubDistrict[sub]) bySubDistrict[sub] = [];
+                                bySubDistrict[sub].push(s.StationNumber);
+                            });
+                            detail += `\n✔ บันทึกครบแล้ว:`;
+                            Object.entries(bySubDistrict).forEach(([sub, nums]) => {
+                                const subLabel = sub.startsWith('แขวง') ? sub : `แขวง${sub}`;
+                                detail += `\n${subLabel} — หน่วยที่ ${nums.join(', ')}`;
                             });
                         } else {
-                            detail += `\n      (ยังไม่มีหน่วยที่บันทึกครบ)`;
+                            detail += `\n-ยังไม่มีหน่วยที่บันทึกครบ`;
                         }
 
                         return detail;
@@ -1475,8 +1515,8 @@
                 }
 
                 const message = `📋 รายงานสถานะการบันทึก กปน.\nวันที่ ${dateStr} เวลา ${timeStr} น.\n\n` +
-                    `✅ บันทึกครบแล้ว (${completed.length}/${agencyList.length} หน่วยงาน):\n${completedLines}\n\n` +
-                    `⏳ ระหว่างดำเนินการ (${pending.length} หน่วยงาน):\n${pendingLines}`;
+                    `✅ บันทึกครบแล้ว (${completed.length}/${agencyList.length} โรงเรียน):\n${completedLines}\n\n` +
+                    `⏳ ระหว่างดำเนินการ (${pending.length} โรงเรียน):${pendingLines}`;
 
                 window._lineMessage = message;
 
@@ -1735,8 +1775,9 @@
                         this.currentUser = response.agency;
                         this.isReadOnly = response.isReadOnly || false;
                         
-                        sessionStorage.setItem('loggedInAgency', response.agency);
-                        sessionStorage.setItem('isReadOnly', this.isReadOnly);
+                        localStorage.setItem('loggedInAgency', response.agency);
+                        localStorage.setItem('isReadOnly', this.isReadOnly);
+                        localStorage.setItem('loginExpiry', (Date.now() + 30 * 24 * 60 * 60 * 1000).toString());
 
                         if(this.isReadOnly && response.message) {
                              Swal.fire({
@@ -1754,9 +1795,11 @@
             },
 
             handleLogout() { 
-                sessionStorage.removeItem('loggedInAgency'); 
-                sessionStorage.removeItem('isReadOnly'); 
+                localStorage.removeItem('loggedInAgency'); 
+                localStorage.removeItem('isReadOnly'); 
+                localStorage.removeItem('loginExpiry'); 
                 this.isReadOnly = false;
+                if (this.bgUpdateInterval) clearInterval(this.bgUpdateInterval);
                 this.checkLoginState(); 
             },
             
