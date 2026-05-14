@@ -1269,7 +1269,46 @@
                     return;
                 }
 
-                // กรองเฉพาะหน่วยงานที่ไม่ใช่ รปภ.
+                // เปิด modal ครั้งแรก
+                Swal.fire({
+                    title: '<i class="fa-solid fa-clipboard-list mr-2 text-emerald-700"></i><span class="text-gray-800">เช็คลิสต์การบันทึก กปน.</span>',
+                    html: '<div id="kpn-checklist-content"><div class="text-center py-10"><i class="fa-solid fa-spinner fa-spin text-3xl text-theme-600"></i></div></div>',
+                    width: '860px',
+                    showConfirmButton: false,
+                    showCloseButton: true,
+                    customClass: { popup: 'rounded-2xl' },
+                    didOpen: () => {
+                        // Render เนื้อหาทันที
+                        this.renderKPNChecklistContent();
+                        // ตั้ง interval อัพเดทเบื้องหลังทุก 30 วินาที
+                        this.kpnChecklistInterval = setInterval(() => {
+                            apiCall('getDashboardData', { agency: this.currentUser }).then(res => {
+                                if (res.status === 'success') {
+                                    this.currentStationsData = res.stations || [];
+                                    if (res.summary) this.currentSummaryData = res.summary;
+                                    // อัพเดทเนื้อหาใน modal ที่เปิดอยู่
+                                    this.renderKPNChecklistContent();
+                                }
+                            }).catch(() => {}); // เงียบๆ ถ้า error
+                        }, 30000);
+                    },
+                    didClose: () => {
+                        // เคลียร์ interval เมื่อปิด modal
+                        if (this.kpnChecklistInterval) {
+                            clearInterval(this.kpnChecklistInterval);
+                            this.kpnChecklistInterval = null;
+                        }
+                    }
+                });
+            },
+
+            renderKPNChecklistContent() {
+                const container = document.getElementById('kpn-checklist-content');
+                if (!container) return;
+
+                const summary = this.currentSummaryData;
+                if (!summary || summary.length === 0) return;
+
                 const agencyList = summary.filter(a => !a.agencyName.includes('รักษาความปลอดภัย') && !a.agencyName.includes('รปภ'));
                 const totalAgencies = agencyList.length;
                 const completedAgencies = agencyList.filter(a => a.overallProgress >= 100).length;
@@ -1310,7 +1349,7 @@
                         </tr>`;
                 }).join('');
 
-                const modalHtml = `
+                container.innerHTML = `
                     <div class="mb-4 grid grid-cols-3 gap-3 text-left">
                         <div class="bg-blue-50 border border-blue-200 rounded-xl p-3">
                             <div class="text-xs text-blue-600 font-bold mb-1"><i class="fa-solid fa-building mr-1"></i>หน่วยงานทั้งหมด</div>
@@ -1344,15 +1383,6 @@
                     <div class="mt-3 flex gap-2 justify-end">
                         <button onclick="app.notifyAllCompleted()" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-bold transition-colors shadow"><i class="fa-brands fa-line"></i> คัดลอกรายงานรวม</button>
                     </div>`;
-
-                Swal.fire({
-                    title: '<i class="fa-solid fa-clipboard-list mr-2 text-emerald-700"></i><span class="text-gray-800">เช็คลิสต์การบันทึก กปน.</span>',
-                    html: modalHtml,
-                    width: '860px',
-                    showConfirmButton: false,
-                    showCloseButton: true,
-                    customClass: { popup: 'rounded-2xl' }
-                });
             },
 
             showLineNotifyModal(agencyName, completed, total) {
